@@ -1,0 +1,4 @@
+.env
+.claude/*
+dist/
+.vscode/tasks.json

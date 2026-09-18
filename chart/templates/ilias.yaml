@@ -1,0 +1,153 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    {{- include "ilias.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}
+        app.kubernetes.io/name: ilias
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-for-db
+          image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              until mariadb -h {{ include "ilias.mariadbHost" . }} -u {{ .Values.mariadb.user }} -p"$ILIAS_DB_PASSWORD" -e "SELECT 1" &>/dev/null; do
+                echo "Waiting for MariaDB..."
+                sleep 3
+              done
+          env:
+            - name: ILIAS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+          resources: {{- toYaml .Values.resources.init | nindent 12 }}
+        {{- if .Values.branding.enabled }}
+        - name: build-delos-css
+          image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              cat /var/www/html/public/assets/css/delos.css > /delos-out/delos.css
+              cat /branding/custom.css >> /delos-out/delos.css
+          volumeMounts:
+            - name: delos-css
+              mountPath: /delos-out
+            - name: branding
+              mountPath: /branding
+          resources: {{- toYaml .Values.resources.init | nindent 12 }}
+        {{- end }}
+      containers:
+        - name: ilias
+          image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
+          imagePullPolicy: {{ .Values.images.ilias.pullPolicy }}
+          resources: {{- toYaml .Values.resources.ilias | nindent 12 }}
+          env:
+            - name: ILIAS_AUTO_SETUP
+              value: {{ .Values.ilias.autoSetup | quote }}
+            - name: ILIAS_DB_HOST
+              value: {{ include "ilias.mariadbHost" . }}
+            - name: ILIAS_DB_USER
+              value: {{ .Values.mariadb.user }}
+            - name: ILIAS_DB_NAME
+              value: {{ .Values.mariadb.database }}
+            - name: ILIAS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+            - name: ILIAS_HTTP_PATH
+              value: {{ .Values.ilias.httpPath | quote }}
+            - name: ILIAS_TIMEZONE
+              value: {{ .Values.ilias.timezone }}
+            - name: ILIAS_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyIliasRootPassword" . }}
+            - name: ILIAS_MAX_UPLOAD_SIZE
+              value: {{ .Values.ilias.maxUploadSize }}
+          startupProbe:
+            httpGet:
+              path: /health.php
+              port: 80
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health.php
+              port: 80
+            periodSeconds: 60
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health.php
+              port: 80
+            periodSeconds: 60
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: ilias-public
+              mountPath: /var/www/html/public/data
+            - name: ilias-data
+              mountPath: /var/iliasdata/ilias
+            {{- if .Values.branding.enabled }}
+            - name: branding
+              mountPath: /var/www/html/public/assets/images/logo/HeaderIcon.svg
+              subPath: HeaderIcon.svg
+            - name: branding
+              mountPath: /var/www/html/public/assets/images/logo/HeaderIconResponsive.svg
+              subPath: HeaderIconResponsive.svg
+            - name: delos-css
+              mountPath: /var/www/html/public/assets/css/delos.css
+              subPath: delos.css
+            {{- end }}
+            - name: health
+              mountPath: /var/www/html/public/health.php
+              subPath: health.php
+      volumes:
+        - name: ilias-public
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-public
+        - name: ilias-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-data
+        {{- if .Values.branding.enabled }}
+        - name: branding
+          configMap:
+            name: {{ .Release.Name }}-branding
+        - name: delos-css
+          emptyDir: {}
+        {{- end }}
+        - name: health
+          configMap:
+            name: {{ .Release.Name }}-health
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Release.Name }}
+  ports:
+    - port: 80
+      targetPort: 80

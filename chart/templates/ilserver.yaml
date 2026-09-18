@@ -1,0 +1,75 @@
+{{- if .Values.ilserver.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-ilserver
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-ilserver
+    {{- include "ilias.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-ilserver
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-ilserver
+        app.kubernetes.io/name: ilias-ilserver
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: ilserver
+          image: {{ .Values.images.ilserver.repository }}:{{ .Values.images.ilserver.tag }}
+          imagePullPolicy: {{ .Values.images.ilserver.pullPolicy }}
+          resources: {{- toYaml .Values.resources.ilserver | nindent 12 }}
+          ports:
+            - containerPort: 11111
+          volumeMounts:
+            - name: ilias-public
+              mountPath: /app/data
+              readOnly: true
+            - name: ilias-data
+              mountPath: /app/iliasdata
+              readOnly: true
+          startupProbe:
+            tcpSocket:
+              port: 11111
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          readinessProbe:
+            tcpSocket:
+              port: 11111
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            tcpSocket:
+              port: 11111
+            periodSeconds: 60
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: ilias-public
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-public
+        - name: ilias-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ilserver
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Release.Name }}-ilserver
+  ports:
+    - port: 11111
+      targetPort: 11111
+{{- end }}

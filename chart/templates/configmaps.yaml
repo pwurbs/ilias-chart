@@ -1,0 +1,22 @@
+{{- if .Values.branding.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-branding
+  namespace: {{ .Release.Namespace }}
+data:
+  HeaderIcon.svg: |
+{{ .Values.branding.headerIconSvg | indent 4 }}
+  HeaderIconResponsive.svg: |
+{{ .Values.branding.headerIconResponsiveSvg | indent 4 }}
+  custom.css: |
+{{ .Values.branding.css | indent 4 }}
+---
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-health
+  namespace: {{ .Release.Namespace }}
+data:
+{{ (.Files.Glob "health/*").AsConfig | indent 2 }}

@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-mariadb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-mariadb
+    {{- include "ilias.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-mariadb
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-mariadb
+        app.kubernetes.io/name: ilias-mariadb
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: mariadb
+          image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}
+          args:
+            - --character-set-server=utf8
+            - --collation-server=utf8_general_ci
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyMariadbRootPassword" . }}
+            - name: MYSQL_DATABASE
+              value: {{ .Values.mariadb.database }}
+            - name: MYSQL_USER
+              value: {{ .Values.mariadb.user }}
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+          resources: {{- toYaml .Values.resources.mariadb | nindent 12 }}
+          startupProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            exec:
+              command: ["healthcheck.sh", "--connect", "--innodb_initialized"]
+            periodSeconds: 60
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-mariadb-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "ilias.mariadbHost" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Release.Name }}-mariadb
+  ports:
+    - port: 3306
+      targetPort: 3306

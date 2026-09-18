@@ -1,0 +1,103 @@
+images:
+  ilias:
+    repository: srsolutions/ilias
+    tag: 11.4-php8.4-apache
+    pullPolicy: IfNotPresent
+  mariadb:
+    repository: mariadb
+    tag: "12.3.3"
+    pullPolicy: IfNotPresent
+  ilserver:
+    # ILIAS Java server for certificate/PDF generation
+    repository: srsolutions/ilias-ilserver
+    tag: 11-openjdk21-jre
+    pullPolicy: IfNotPresent
+
+ilias:
+  httpPath: ""         # e.g. https://ilias.example.com — set in your own values override file
+  timezone: Europe/Berlin
+  maxUploadSize: 5000M
+  autoSetup: "0" # Safe default. Set to "1" temporarily for the initial install or an ILIAS update, in your own values override file
+
+secrets:
+  # existingSecret: if set, name of an already existing Secret — for
+  # setups where the Secret is created and managed outside of this chart (e.g. SOPS, External
+  # Secrets Operator). If left empty, the chart generates these three passwords itself on first
+  # install and keeps them stable across upgrades — no cleartext
+  # password ever needs to be set as a value.
+  existingSecret: ""
+  # Only relevant when existingSecret is set: key names inside that Secret, in case it doesn't
+  # use the chart's own default key names.
+  existingSecretKeys:
+    iliasRootPassword: ""    # default: ilias-root-password
+    iliasDbPassword: ""      # default: ilias-db-password
+    mariadbRootPassword: ""  # default: mariadb-root-password
+
+branding:
+  # Optional custom branding (header icons + CSS override)
+  # Items are injected via the values below
+  enabled: false
+  # Literal SVG markup (the file content itself — not a file path, not base64) for
+  # HeaderIcon.svg / HeaderIconResponsive.svg, replaces the ILIAS default icons. Set it as
+  # an inline block scalar in a values file, or via `helm install --set-file
+  # branding.headerIconSvg=./HeaderIcon.svg`.
+  headerIconSvg: ""
+  headerIconResponsiveSvg: ""
+  # CSS appended to the ILIAS default delos.css
+  css: ""
+
+ilserver:
+  # The ILIAS Java server is only needed for certificate/PDF generation. When false,
+  # neither the Deployment nor the Service is rendered.
+  enabled: true
+
+mariadb:
+  database: ilias
+  user: ilias
+
+ingress:
+  host: ""             # e.g. ilias.example.com — set in your own values override file
+  tls:
+    enabled: true
+    secretName: ""     # empty = ingress controller's default certificate; with cert-manager: name of the TLS Secret
+
+storage:
+  storageClass: local-path   # k3s's built-in default StorageClass — override for other distributions/cloud providers
+  mariadb:
+    size: 5Gi
+  iliasPublic:
+    size: 5Gi
+  iliasData:
+    size: 50Gi
+
+resources:
+  init:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      memory: 128Mi
+  ilias:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      memory: 2Gi
+  cron:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      memory: 512Mi
+  mariadb:
+    requests:
+      cpu: 200m
+      memory: 256Mi
+    limits:
+      memory: 1Gi
+  ilserver:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      memory: 500Mi

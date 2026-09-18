@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-cron
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-cron
+    {{- include "ilias.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-cron
+  template:
+    metadata:
+      labels:
+        app: {{ .Release.Name }}-cron
+        app.kubernetes.io/name: ilias-cron
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: wait-for-db
+          image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              until mariadb -h {{ include "ilias.mariadbHost" . }} -u {{ .Values.mariadb.user }} -p"$ILIAS_DB_PASSWORD" -e "SELECT 1" &>/dev/null; do
+                echo "Waiting for MariaDB..."
+                sleep 3
+              done
+          env:
+            - name: ILIAS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "ilias.secretName" . }}
+                  key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+          resources: {{- toYaml .Values.resources.init | nindent 12 }}
+      containers:
+        - name: ilias-cron
+          image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
+          imagePullPolicy: {{ .Values.images.ilias.pullPolicy }}
+          command: ["cron", "-f"]
+          resources: {{- toYaml .Values.resources.cron | nindent 12 }}
+          volumeMounts:
+            - name: ilias-public
+              mountPath: /var/www/html/public/data
+            - name: ilias-data
+              mountPath: /var/iliasdata/ilias
+      volumes:
+        - name: ilias-public
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-public
+        - name: ilias-data
+          persistentVolumeClaim:
+            claimName: {{ .Release.Name }}-ilias-data

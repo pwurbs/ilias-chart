@@ -1,0 +1,13 @@
+apiVersion: v2
+name: ilias
+description: ILIAS LMS deployment
+type: application
+version: 1.0.0
+appVersion: "11.4"
+icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
+home: https://codeberg.org/pwurbs/ilias-chart
+sources:
+  - https://codeberg.org/pwurbs/ilias-chart
+maintainers:
+  - name: pwurbs
+    url: https://codeberg.org/pwurbs
