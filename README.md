@@ -1,5 +1,7 @@
 # ILIAS Helm Chart
 
+This chart aims to provide a secure and simple deployment of ILIAS, keeping the values you need to set to a minimum.
+
 Helm chart for deploying [ILIAS](https://www.ilias.de/) LMS on Kubernetes, including MariaDB, the ILIAS cron daemon, and optionally the ILIAS Java server (`ilserver`, for certificate/PDF generation).
 
 ## Installation
