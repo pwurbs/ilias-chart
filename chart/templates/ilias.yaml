@@ -20,9 +20,17 @@ spec:
         app.kubernetes.io/name: ilias
     spec:
       automountServiceAccountToken: false
+      securityContext:
+        sysctls:
+          # lets non-root (www-data, uid 33) bind port 80 without root or NET_BIND_SERVICE
+          - name: net.ipv4.ip_unprivileged_port_start
+            value: "80"
       initContainers:
         - name: wait-for-db
-          image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}
+          # Uses the ilias image (which bundles the mariadb client) rather than the mariadb
+          # image, so this runs as the same uid (33/www-data) as the ilias container below —
+          # the two files it touches are then owned by the same user that later writes them.
+          image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
           command: ["sh", "-c"]
           args:
             - |
@@ -30,12 +38,30 @@ spec:
                 echo "Waiting for MariaDB..."
                 sleep 3
               done
+              # Use this initContainer too to pre-create real files inside the emptyDir: subPath targets that don't
+              # already exist in the volume are created as directories by kubelet on first mount,
+              # which would make the entrypoint's `echo ... > ilias.ini` fail with "Is a directory".
+              touch /writable-etc/cron-ilias /writable-etc/php-ilias-ini
           env:
             - name: ILIAS_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "ilias.secretName" . }}
                   key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: ilias-writable-etc
+              mountPath: /writable-etc
           resources: {{- toYaml .Values.resources.init | nindent 12 }}
         {{- if .Values.branding.enabled }}
         - name: build-delos-css
@@ -45,6 +71,17 @@ spec:
             - |
               cat /var/www/html/public/assets/css/delos.css > /delos-out/delos.css
               cat /branding/custom.css >> /delos-out/delos.css
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
           volumeMounts:
             - name: delos-css
               mountPath: /delos-out
@@ -56,6 +93,40 @@ spec:
         - name: ilias
           image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
           imagePullPolicy: {{ .Values.images.ilias.pullPolicy }}
+          # The image entrypoint runs its setup/update steps via `su www-data`, assuming it
+          # started as root and needs to switch to www-data. This container already runs as
+          # www-data, so source and target user are identical — but the real `su` still goes
+          # through PAM, which needs either a root caller or a password www-data (a service
+          # account) doesn't have, and `set -e` then aborts the whole start. Shadowing `su`
+          # with a shell function handles exactly that same-user case for this one shell; the
+          # entrypoint is then sourced unchanged, so all setup/update logic (install.json,
+          # root password, ...) stays owned by the image.
+          command: ["bash", "-c"]
+          args:
+            - |
+              su() {
+                local cmd=
+                while [ $# -gt 0 ]; do
+                  case $1 in
+                    -c) cmd=$2; shift 2 ;;
+                    -s) shift 2 ;;
+                    *)  shift ;;
+                  esac
+                done
+                sh -c "$cmd"
+              }
+              . /usr/local/bin/docker-ilias-entrypoint apache2-foreground
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
           resources: {{- toYaml .Values.resources.ilias | nindent 12 }}
           env:
             - name: ILIAS_AUTO_SETUP
@@ -122,6 +193,12 @@ spec:
             - name: health
               mountPath: /var/www/html/public/health.php
               subPath: health.php
+            - name: ilias-writable-etc
+              mountPath: /etc/cron.d/ilias
+              subPath: cron-ilias
+            - name: ilias-writable-etc
+              mountPath: /usr/local/etc/php/conf.d/ilias.ini
+              subPath: php-ilias-ini
       volumes:
         - name: ilias-public
           persistentVolumeClaim:
@@ -129,6 +206,10 @@ spec:
         - name: ilias-data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-ilias-data
+        # Lets the entrypoint write /etc/cron.d/ilias and .../conf.d/ilias.ini as non-root —
+        # both dirs are root-owned (mode 755) in the image, see wait-for-db above for the touch.
+        - name: ilias-writable-etc
+          emptyDir: {}
         {{- if .Values.branding.enabled }}
         - name: branding
           configMap:

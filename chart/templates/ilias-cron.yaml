@@ -1,5 +1,5 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: CronJob
 metadata:
   name: {{ .Release.Name }}-cron
   namespace: {{ .Release.Namespace }}
@@ -7,51 +7,105 @@ metadata:
     app: {{ .Release.Name }}-cron
     {{- include "ilias.labels" . | nindent 4 }}
 spec:
-  replicas: 1
-  strategy:
-    type: Recreate
-  selector:
-    matchLabels:
-      app: {{ .Release.Name }}-cron
-  template:
-    metadata:
-      labels:
-        app: {{ .Release.Name }}-cron
-        app.kubernetes.io/name: ilias-cron
+  schedule: {{ .Values.cron.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
     spec:
-      automountServiceAccountToken: false
-      initContainers:
-        - name: wait-for-db
-          image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}
-          command: ["sh", "-c"]
-          args:
-            - |
-              until mariadb -h {{ include "ilias.mariadbHost" . }} -u {{ .Values.mariadb.user }} -p"$ILIAS_DB_PASSWORD" -e "SELECT 1" &>/dev/null; do
-                echo "Waiting for MariaDB..."
-                sleep 3
-              done
-          env:
-            - name: ILIAS_DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: {{ include "ilias.secretName" . }}
-                  key: {{ include "ilias.secretKeyIliasDbPassword" . }}
-          resources: {{- toYaml .Values.resources.init | nindent 12 }}
-      containers:
-        - name: ilias-cron
-          image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
-          imagePullPolicy: {{ .Values.images.ilias.pullPolicy }}
-          command: ["cron", "-f"]
-          resources: {{- toYaml .Values.resources.cron | nindent 12 }}
-          volumeMounts:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app: {{ .Release.Name }}-cron
+            app.kubernetes.io/name: ilias-cron
+        spec:
+          restartPolicy: Never
+          automountServiceAccountToken: false
+          initContainers:
+            - name: prepare-etc
+              # Same fix as in ilias.yaml: the image entrypoint (which now runs here too, see
+              # below) writes /etc/cron.d/ilias and .../conf.d/ilias.ini unconditionally on every
+              # start, into root-owned (mode 755) directories — pre-create them as real files so
+              # subPath doesn't turn them into directories, and so the write succeeds non-root.
+              image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
+              command: ["sh", "-c"]
+              args:
+                - |
+                  touch /writable-etc/cron-ilias /writable-etc/php-ilias-ini
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 33
+                runAsGroup: 33
+                seccompProfile:
+                  type: RuntimeDefault
+              volumeMounts:
+                - name: ilias-writable-etc
+                  mountPath: /writable-etc
+              resources: {{- toYaml .Values.resources.init | nindent 16 }}
+          containers:
+            - name: ilias-cron
+              image: {{ .Values.images.ilias.repository }}:{{ .Values.images.ilias.tag }}
+              imagePullPolicy: {{ .Values.images.ilias.pullPolicy }}
+              # The image ENTRYPOINT runs here (`args`, not `command`), because it generates
+              # /var/www/html/ilias.ini.php and client.ini.php on every start — files
+              # cli/cron.php reads during boot (e.g. ILIAS_WEB_DIR comes from ilias.ini.php).
+              # `args` supplies the command the entrypoint execs at the end via `exec "$@"`,
+              # running cli/cron.php as www-data. The entrypoint's install/update logic is
+              # gated on `$1` matching apache2*/php-fpm; here `$1` is `php`, so it stays inactive.
+              args: ["php", "/var/www/html/cli/cron.php", "run-jobs", "root", "default"]
+              env:
+                - name: ILIAS_DB_HOST
+                  value: {{ include "ilias.mariadbHost" . }}
+                - name: ILIAS_DB_USER
+                  value: {{ .Values.mariadb.user }}
+                - name: ILIAS_DB_NAME
+                  value: {{ .Values.mariadb.database }}
+                - name: ILIAS_DB_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ include "ilias.secretName" . }}
+                      key: {{ include "ilias.secretKeyIliasDbPassword" . }}
+                - name: ILIAS_HTTP_PATH
+                  value: {{ .Values.ilias.httpPath | quote }}
+                - name: ILIAS_TIMEZONE
+                  value: {{ .Values.ilias.timezone }}
+                - name: ILIAS_MAX_UPLOAD_SIZE
+                  value: {{ .Values.ilias.maxUploadSize }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                privileged: false
+                readOnlyRootFilesystem: false
+                runAsNonRoot: true
+                runAsUser: 33
+                runAsGroup: 33
+                seccompProfile:
+                  type: RuntimeDefault
+              resources: {{- toYaml .Values.resources.cron | nindent 16 }}
+              volumeMounts:
+                - name: ilias-public
+                  mountPath: /var/www/html/public/data
+                - name: ilias-data
+                  mountPath: /var/iliasdata/ilias
+                - name: ilias-writable-etc
+                  mountPath: /etc/cron.d/ilias
+                  subPath: cron-ilias
+                - name: ilias-writable-etc
+                  mountPath: /usr/local/etc/php/conf.d/ilias.ini
+                  subPath: php-ilias-ini
+          volumes:
             - name: ilias-public
-              mountPath: /var/www/html/public/data
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-ilias-public
             - name: ilias-data
-              mountPath: /var/iliasdata/ilias
-      volumes:
-        - name: ilias-public
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-ilias-public
-        - name: ilias-data
-          persistentVolumeClaim:
-            claimName: {{ .Release.Name }}-ilias-data
+              persistentVolumeClaim:
+                claimName: {{ .Release.Name }}-ilias-data
+            - name: ilias-writable-etc
+              emptyDir: {}

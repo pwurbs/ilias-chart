@@ -51,6 +51,11 @@ ilserver:
   # neither the Deployment nor the Service is rendered.
   enabled: true
 
+cron:
+  # How often ILIAS's own job queue (notifications, cleanup, indexing, ...) is run.
+  # Matches the vendor image's original */10 default.
+  schedule: "*/10 * * * *"
+
 mariadb:
   database: ilias
   user: ilias

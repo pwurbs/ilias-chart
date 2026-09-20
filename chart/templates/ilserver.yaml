@@ -21,10 +21,49 @@ spec:
         app.kubernetes.io/name: ilias-ilserver
     spec:
       automountServiceAccountToken: false
+      initContainers:
+        - name: prepare-config
+          # Pre-creates the two files below as real files inside the emptyDir — without this,
+          # kubelet would create them as directories on first mount (since subPath targets that
+          # don't already exist in the volume are created as directories, not files), and the
+          # ilserver entrypoint's config writes would then fail with "Is a directory". Runs as
+          # the same uid (33) as the ilserver container below, so no group-write workaround is
+          # needed — owner-write via the default touch permissions is enough.
+          image: {{ .Values.images.ilserver.repository }}:{{ .Values.images.ilserver.tag }}
+          command: ["sh", "-c"]
+          args:
+            - |
+              touch /writable-config/ilias.ini.php /writable-config/ilServer.properties
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
+          volumeMounts:
+            - name: ilserver-config
+              mountPath: /writable-config
+          resources: {{- toYaml .Values.resources.init | nindent 12 }}
       containers:
         - name: ilserver
           image: {{ .Values.images.ilserver.repository }}:{{ .Values.images.ilserver.tag }}
           imagePullPolicy: {{ .Values.images.ilserver.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
           resources: {{- toYaml .Values.resources.ilserver | nindent 12 }}
           ports:
             - containerPort: 11111
@@ -35,6 +74,14 @@ spec:
             - name: ilias-data
               mountPath: /app/iliasdata
               readOnly: true
+            - name: ilserver-config
+              mountPath: /app/ilias.ini.php
+              subPath: ilias.ini.php
+            - name: ilserver-config
+              mountPath: /app/ilServer.properties
+              subPath: ilServer.properties
+            - name: ilserver-lucene
+              mountPath: /var/lucenedata/ilias
           startupProbe:
             tcpSocket:
               port: 11111
@@ -60,6 +107,14 @@ spec:
         - name: ilias-data
           persistentVolumeClaim:
             claimName: {{ .Release.Name }}-ilias-data
+        # Lets the entrypoint write /app/ilias.ini.php and ilServer.properties as non-root —
+        # see the prepare-config init container above for the touch.
+        - name: ilserver-config
+          emptyDir: {}
+        # Lucene search index (IndexPath in ilServer.properties) is root-owned (mode 755) in the
+        # image; not persisted before this change either (no PVC), just now non-root-writable too.
+        - name: ilserver-lucene
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
