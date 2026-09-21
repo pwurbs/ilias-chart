@@ -1,7 +1,7 @@
 # Changelog
 
 ## 1.1.1
-- `ilias-cron`: completed Jobs are now cleaned up via `ttlSecondsAfterFinished`, keeping fast-completing Job Pods around for less time
+- `ilias-cron`: `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` reduced from 3 to 1
 
 ## 1.1.0
 - Restricted-PSA-compatible `securityContext` for all containers and init containers
