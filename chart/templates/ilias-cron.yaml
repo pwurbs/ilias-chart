@@ -58,7 +58,7 @@ spec:
               # `args` supplies the command the entrypoint execs at the end via `exec "$@"`,
               # running cli/cron.php as www-data. The entrypoint's install/update logic is
               # gated on `$1` matching apache2*/php-fpm; here `$1` is `php`, so it stays inactive.
-              args: ["php", "/var/www/html/cli/cron.php", "run-jobs", "root", "default"]
+              args: ["php", "/var/www/html/cli/cron.php", "run-jobs", {{ .Values.cron.user | quote }}, {{ .Values.cron.clientId | quote }}]
               env:
                 - name: ILIAS_DB_HOST
                   value: {{ include "ilias.mariadbHost" . }}

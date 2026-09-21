@@ -62,6 +62,26 @@ If your externally managed Secret uses different key names, point the chart at t
 
 The same drift risk described above applies here too — it's now on you to keep its values in sync with what's actually configured in MariaDB/ILIAS.
 
+### Cron technical user
+
+`ilias-cron` runs `cli/cron.php run-jobs <user> <client_id>` (`cron.user`/`cron.clientId` in
+`values.yaml`, defaulting to `root`/`default` — the built-in superadmin, for out-of-the-box
+compatibility). ILIAS requires the cron `<user>` to have `auth_mode=local` and `active=1` — the same
+requirement a normal web login has — but needs no RBAC role/permissions: ILIAS's Cron component
+contract forbids cron job implementations from relying on permissions, and this holds up in
+ILIAS's own core cron jobs (mail notifications, certificates, StudyProgramme progress, ...), which
+operate through repository classes that bypass the RBAC layer entirely regardless of which user
+runs them.
+
+**Recommended hardening (opt-in, not the chart default):** point `cron.user` at a dedicated,
+permission-less account instead of `root`. Because `auth_mode=local`+`active=1` makes an account
+reachable through the normal web login form, using `root` for cron permanently forces the
+superadmin account to stay locally-authenticatable and active — you can't deactivate it or move it
+to SSO-only without breaking cron. A dedicated account limits what a compromised password can
+reach, and since cron doesn't check RBAC, a low-privilege role (e.g. the built-in Guest role) works
+just as well as any other. This is a per-deployment decision, not a chart default, because it
+requires manually creating that account first:
+
 ### `autoSetup` — hint
 
 With `autoSetup: "1"`, the container entrypoint checks on **every** start whether the `settings` table exists: if it's empty, a **fresh install** runs (risk if the DB is accidentally empty or misconnected); if ILIAS is already installed, `cli/setup.php update -y` runs automatically without manual confirmation. So keep it at `"0"` in normal operation, and only set it to `"1"` briefly for the initial install/update, then reset it.

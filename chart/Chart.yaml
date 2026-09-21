@@ -2,7 +2,7 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.1
+version: 1.1.2
 appVersion: "11.4"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart

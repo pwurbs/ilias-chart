@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.2
+- `cron.user`/`cron.clientId` values added — `run-jobs` login and client ID are now configurable instead of hardcoded to `root`/`default`
+
 ## 1.1.1
 - `ilias-cron`: `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` reduced from 3 to 1
 
