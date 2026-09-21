@@ -9,11 +9,13 @@ metadata:
 spec:
   schedule: {{ .Values.cron.schedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
   jobTemplate:
     spec:
       backoffLimit: 2
+      # Deletes each completed Job (and its Pod) 10 minutes after it finishes, keeping the
+      # namespace tidy and the window during which known kubelet/CronJob-controller races on
+      # fast-completing Jobs (kubernetes/kubernetes#56805, #121070) can trigger short.
+      ttlSecondsAfterFinished: 600
       template:
         metadata:
           labels:
