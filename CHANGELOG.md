@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.3
+- `secret.yaml`: fixed Flux drift-correction failing after a manual credential rotation
+
 ## 1.1.2
 - `cron.user`/`cron.clientId` values added — `run-jobs` login and client ID are now configurable instead of hardcoded to `root`/`default`
 

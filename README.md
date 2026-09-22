@@ -35,8 +35,10 @@ All other values (timezone, upload size, TLS secret name, resource requests/limi
 
 ### Secrets
 
-By default (`secrets.existingSecret` empty), the chart generates `ilias-root-password`, `ilias-db-password`, and `mariadb-root-password` itself on first install (`chart/templates/secret.yaml`, via Helm's `lookup` + `randAlphaNum`) and reuses the existing values on every subsequent `helm upgrade` — no cleartext password ever needs to be set as a value.
-This matters beyond convenience: all three passwords are only ever consumed once, at the very first start. MariaDB only applies `MYSQL_ROOT_PASSWORD`/`MYSQL_PASSWORD` when initializing an empty data directory, and ILIAS only applies `ILIAS_ROOT_PASSWORD` (the admin account password) during the initial setup run — later starts read but ignore these. `ILIAS_DB_PASSWORD` is the exception: ILIAS reads it live on every start to connect to MariaDB, so a mismatch there breaks connectivity immediately, not just at setup.
+By default (`secrets.existingSecret` empty), the chart generates `ilias-root-password`, `ilias-db-password`, and `mariadb-root-password` itself on first install (`chart/templates/secret.yaml`, via Helm's `lookup` + `randAlphaNum`) — no cleartext password ever needs to be set as a value. On every subsequent render, it carries the live values through unchanged. So, as long as nothing rotated them out of band, the rendered Secret is byte-identical to the live one, and the Secret stays a normal, permanent part of every release's manifest.
+If the Secret already exists but is missing one of the three keys, the chart refuses to render (`fail`) rather than mint a replacement that would no longer match the live MariaDB/ILIAS credentials — see Rotation below for how that can happen and how to recover.
+
+`ilias-root-password` and `mariadb-root-password` are only ever consumed once, at the very first start: MariaDB only applies `MYSQL_ROOT_PASSWORD` when initializing an empty data directory, and ILIAS only applies `ILIAS_ROOT_PASSWORD` (the admin account password) during the initial setup run — later starts read but ignore these. `ilias-db-password` is different: MariaDB applies its `MYSQL_PASSWORD` copy the same first-start-only way, but ILIAS reads its `ILIAS_DB_PASSWORD` copy of the same value live on every start to connect to MariaDB — so a mismatch there breaks connectivity immediately, not just at setup.
 
 Retrieve the generated admin password for the initial login:
 
@@ -44,10 +46,10 @@ Retrieve the generated admin password for the initial login:
 kubectl -n ilias get secret <release-name>-secrets -o jsonpath='{.data.ilias-root-password}' | base64 -d; echo
 ```
 
-Change it right after logging in — the Secret still holds it in plaintext afterwards, and the underlying `ILIAS_ROOT_PASSWORD` env var is, as explained above, ignored on every start after the first anyway, so changing it in ILIAS itself is strongly recommended and free of side effects.
+Change it right after logging in — the Secret still holds it afterwards, and the underlying `ILIAS_ROOT_PASSWORD` env var is, as explained above, ignored on every start after the first anyway, so changing it in ILIAS itself is strongly recommended and free of side effects.
 
 Note that `lookup` requires a live cluster connection — it works with `helm install`/`upgrade` and with Flux's `helm-controller`, but always generates fresh (throwaway) values when rendering offline, e.g. plain `helm template`.
-This stability only holds while the Secret object itself survives: deleting it independently of the PVCs (or reinstalling on top of the same PVCs after a `helm uninstall`) makes the chart generate a new, mismatched password on the next deploy — so back it up together with the PVCs.
+This stability only holds while the Secret object itself survives: deleting it independently of the PVCs (or reinstalling on top of the same PVCs after a `helm uninstall`) makes the chart generate a new, mismatched password on the next deploy — so back it up together with the PVCs. The `helm.sh/resource-policy: keep` annotation on the Secret  protects against `helm uninstall`.
 
 If you'd rather manage the Secret yourself outside of Helm (SOPS, External Secrets Operator, Sealed Secrets, ...), set `secrets.existingSecret` to its name and create it out of band.
 
@@ -60,7 +62,56 @@ kubectl -n ilias create secret generic ilias-secrets \
 
 If your externally managed Secret uses different key names, point the chart at them via `secrets.existingSecretKeys.iliasRootPassword`/`iliasDbPassword`/`mariadbRootPassword` instead of renaming the keys — they default to `ilias-root-password`/`ilias-db-password`/`mariadb-root-password`.
 
-The same drift risk described above applies here too — it's now on you to keep its values in sync with what's actually configured in MariaDB/ILIAS.
+The same drift risk described below applies here too — it's now on you to keep its values in sync with what's actually configured in MariaDB/ILIAS.
+
+#### Password Rotation
+
+Rotating a password means changing it at the source (MariaDB/ILIAS) and in the Secret together, then restarting `ilias`.
+
+Using Flux with `driftDetection: mode: enabled`? Add this to the HelmRelease once, before your first rotation, or step 2 below can race Flux's own drift correction:
+
+```yaml
+spec:
+  driftDetection:
+    mode: enabled
+    ignore:
+      - paths: ["/data"]
+        target:
+          kind: Secret
+          name: ilias-secrets   # <release-name>-secrets
+```
+
+```bash
+# 1) Set up: namespace, Secret name, the MariaDB pod (for step 2), and the new password.
+NS=ilias; SECRET=ilias-secrets; POD=$(kubectl -n $NS get pod -l app=ilias-mariadb -o jsonpath='{.items[0].metadata.name}')
+NEW=$(openssl rand -hex 24)
+
+# 2) Change it at the source. Rotates ilias-db-password. To rotate
+#    mariadb-root-password instead, replace the ALTER USER line below with:
+#      ALTER USER 'root'@'%' IDENTIFIED BY '$NEW';
+#      ALTER USER 'root'@'localhost' IDENTIFIED BY '$NEW';
+kubectl exec -i -n "$NS" "$POD" -- sh -c 'mariadb -uroot -p"$MARIADB_ROOT_PASSWORD"' <<EOF
+ALTER USER 'ilias'@'%' IDENTIFIED BY '$NEW';
+EOF
+
+# 3) Patch the Secret to match (use key mariadb-root-password instead, if that's
+#    the one you rotated in step 2).
+kubectl patch secret "$SECRET" -n "$NS" --type merge \
+  -p "{\"stringData\":{\"ilias-db-password\":\"$NEW\"}}"
+
+# 4) Restart ilias so it picks up the new value. Rotated mariadb-root-password
+#    instead? Restart deployment/ilias-mariadb too — its own healthcheck probes
+#    read that same password from their env, which is just as stale otherwise.
+kubectl rollout restart deployment/ilias -n "$NS"
+
+# 5) Flux only: capture the new value into a release now instead of waiting for the
+#    next regular reconcile.
+flux reconcile hr ilias -n "$NS" --force
+
+unset NEW
+```
+
+No `helm rollback` to a revision from before a rotation — its Secret still holds the password you just replaced.
 
 ### Cron technical user
 
