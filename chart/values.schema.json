@@ -1,0 +1,328 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ILIAS",
+  "type": "object",
+  "required": ["images", "ilias", "ingress"],
+  "properties": {
+    "images": {
+      "type": "object",
+      "required": ["ilias", "mariadb", "ilserver"],
+      "properties": {
+        "ilias": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "default": "srsolutions/ilias",
+              "description": "ILIAS container image repository."
+            },
+            "tag": {
+              "type": "string",
+              "default": "11.4-php8.4-apache",
+              "description": "ILIAS image tag."
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "default": "IfNotPresent",
+              "description": "Kubernetes image pull policy."
+            }
+          }
+        },
+        "mariadb": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "default": "mariadb",
+              "description": "MariaDB container image repository."
+            },
+            "tag": {
+              "type": "string",
+              "default": "12.3.3",
+              "description": "MariaDB image tag."
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "default": "IfNotPresent",
+              "description": "Kubernetes image pull policy."
+            }
+          }
+        },
+        "ilserver": {
+          "type": "object",
+          "properties": {
+            "repository": {
+              "type": "string",
+              "default": "srsolutions/ilias-ilserver",
+              "description": "ILIAS Java server (ilserver) container image repository, used for certificate/PDF generation."
+            },
+            "tag": {
+              "type": "string",
+              "default": "11-openjdk21-jre",
+              "description": "ilserver image tag."
+            },
+            "pullPolicy": {
+              "type": "string",
+              "enum": ["Always", "IfNotPresent", "Never"],
+              "default": "IfNotPresent",
+              "description": "Kubernetes image pull policy."
+            }
+          }
+        }
+      }
+    },
+    "ilias": {
+      "type": "object",
+      "required": ["httpPath"],
+      "properties": {
+        "httpPath": {
+          "type": "string",
+          "minLength": 1,
+          "default": "",
+          "description": "Public URL ILIAS is reached under, e.g. https://ilias.example.com. Must be set by the deployer, no default is provided."
+        },
+        "timezone": {
+          "type": "string",
+          "default": "Europe/Berlin",
+          "description": "Timezone used inside the ILIAS and MariaDB containers."
+        },
+        "maxUploadSize": {
+          "type": "string",
+          "default": "5000M",
+          "description": "Maximum upload size accepted by ILIAS/PHP."
+        },
+        "autoSetup": {
+          "type": "string",
+          "enum": ["0", "1"],
+          "default": "0",
+          "description": "\"1\" runs the setup/update block in the entrypoint on every start (fresh install if the settings table is empty, otherwise an unattended update). Keep at \"0\" in normal operation; set to \"1\" only temporarily for the initial install or a version update."
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Name of an already existing Secret to use instead of letting the chart generate one. Leave empty to have the chart create and manage the Secret itself."
+        },
+        "existingSecretKeys": {
+          "type": "object",
+          "properties": {
+            "iliasRootPassword": {
+              "type": "string",
+              "default": "",
+              "description": "Key name for the ILIAS root/admin password inside an existing Secret. Defaults to ilias-root-password."
+            },
+            "iliasDbPassword": {
+              "type": "string",
+              "default": "",
+              "description": "Key name for the ILIAS DB password inside an existing Secret. Defaults to ilias-db-password."
+            },
+            "mariadbRootPassword": {
+              "type": "string",
+              "default": "",
+              "description": "Key name for the MariaDB root password inside an existing Secret. Defaults to mariadb-root-password."
+            }
+          }
+        }
+      }
+    },
+    "branding": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable custom branding (header icons + CSS override). When false, no branding mechanism is rendered and original ILIAS icons/CSS stay unchanged."
+        },
+        "headerIconSvg": {
+          "type": "string",
+          "default": "",
+          "description": "Raw SVG markup replacing the ILIAS default header icon."
+        },
+        "headerIconResponsiveSvg": {
+          "type": "string",
+          "default": "",
+          "description": "Raw SVG markup replacing the ILIAS default responsive header icon."
+        },
+        "css": {
+          "type": "string",
+          "default": "",
+          "description": "CSS appended to the ILIAS default delos.css."
+        }
+      }
+    },
+    "ilserver": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Deploy the ILIAS Java server (ilserver), used for certificate/PDF generation. When false, neither its Deployment nor Service is rendered."
+        }
+      }
+    },
+    "cron": {
+      "type": "object",
+      "properties": {
+        "schedule": {
+          "type": "string",
+          "default": "*/10 * * * *",
+          "description": "Cron schedule for ILIAS's own job queue (notifications, cleanup, indexing, ...)."
+        },
+        "user": {
+          "type": "string",
+          "default": "root",
+          "description": "ILIAS user name cli/cron.php run-jobs impersonates. Must have auth_mode=local and active=1. Defaults to the built-in root superadmin."
+        },
+        "clientId": {
+          "type": "string",
+          "default": "default",
+          "description": "ILIAS client ID. The vendor image only runs a single client named \"default\"."
+        }
+      }
+    },
+    "mariadb": {
+      "type": "object",
+      "properties": {
+        "database": {
+          "type": "string",
+          "default": "ilias",
+          "description": "MariaDB database name."
+        },
+        "user": {
+          "type": "string",
+          "default": "ilias",
+          "description": "MariaDB user ILIAS connects as."
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "required": ["host"],
+      "properties": {
+        "host": {
+          "type": "string",
+          "minLength": 1,
+          "default": "",
+          "description": "Ingress hostname, e.g. ilias.example.com. Must be set by the deployer, no default is provided."
+        },
+        "tls": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true,
+              "description": "Enable TLS on the ingress."
+            },
+            "secretName": {
+              "type": "string",
+              "default": "",
+              "description": "TLS secret name. Leave empty to use the ingress controller's default certificate, or set the cert-manager-managed Secret name."
+            }
+          }
+        }
+      }
+    },
+    "storage": {
+      "type": "object",
+      "properties": {
+        "storageClass": {
+          "type": "string",
+          "default": "local-path",
+          "description": "StorageClass used for all persistent volume claims. The default local-path StorageClass doesn't support resizing an existing PVC."
+        },
+        "mariadb": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$",
+              "default": "5Gi",
+              "description": "Size of the MariaDB data PVC."
+            }
+          }
+        },
+        "iliasPublic": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$",
+              "default": "5Gi",
+              "description": "Size of the ilias-public PVC."
+            }
+          }
+        },
+        "iliasData": {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "string",
+              "pattern": "^[0-9]+(\\.[0-9]+)?(Ei|Pi|Ti|Gi|Mi|Ki|E|P|T|G|M|k)?$",
+              "default": "50Gi",
+              "description": "Size of the ilias-data PVC."
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "properties": {
+        "init": {
+          "$ref": "#/definitions/resourceSpec"
+        },
+        "ilias": {
+          "$ref": "#/definitions/resourceSpec"
+        },
+        "cron": {
+          "$ref": "#/definitions/resourceSpec"
+        },
+        "mariadb": {
+          "$ref": "#/definitions/resourceSpec"
+        },
+        "ilserver": {
+          "$ref": "#/definitions/resourceSpec"
+        }
+      }
+    }
+  },
+  "definitions": {
+    "resourceSpec": {
+      "type": "object",
+      "properties": {
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "description": "Requested CPU, e.g. 100m."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Requested memory, e.g. 256Mi."
+            }
+          }
+        },
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "description": "CPU limit, e.g. 500m."
+            },
+            "memory": {
+              "type": "string",
+              "description": "Memory limit, e.g. 512Mi."
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.4
+- Chart README added (`chart/README.md`), so it ships with the package
+- Artifact Hub integration added: `artifacthub-repo.yml` and `Chart.yaml` annotations added
+- `values.schema.json` added for validation and Artifact Hub's parameter docs
+
 ## 1.1.3
 - `secret.yaml`: fixed Flux drift-correction failing after a manual credential rotation
 

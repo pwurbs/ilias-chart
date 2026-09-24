@@ -2,7 +2,7 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.3
+version: 1.1.4
 appVersion: "11.4"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart
@@ -11,3 +11,24 @@ sources:
 maintainers:
   - name: pwurbs
     url: https://codeberg.org/pwurbs
+keywords:
+  - lms
+  - e-learning
+  - ilias
+  - education
+  - self-hosted
+  - kubernetes
+annotations:
+  artifacthub.io/category: skip-prediction
+  artifacthub.io/license: Apache-2.0
+  artifacthub.io/changes: |
+    - kind: added
+      description: Chart README added, so it ships with the package
+    - kind: added
+      description: Artifact Hub integration added
+    - kind: added
+      description: values.schema.json added
+  artifacthub.io/containsSecurityUpdates: "false"
+  artifacthub.io/links: |
+    - name: Support
+      url: https://codeberg.org/pwurbs/ilias-chart/issues

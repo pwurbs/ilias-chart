@@ -2,3 +2,4 @@
 .claude/*
 dist/
 .vscode/tasks.json
+.DS_Store
