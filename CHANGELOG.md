@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.5
+- Added optional Apache `mod_remoteip` support to enable ILIAS to see the real client IP behind a reverse proxy
+
 ## 1.1.4
 - Chart README added (`chart/README.md`), so it ships with the package
 - Artifact Hub integration added: `artifacthub-repo.yml` and `Chart.yaml` annotations added

@@ -2,7 +2,7 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.4
+version: 1.1.5
 appVersion: "11.4"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart
@@ -23,11 +23,7 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: added
-      description: Chart README added, so it ships with the package
-    - kind: added
-      description: Artifact Hub integration added
-    - kind: added
-      description: values.schema.json added
+      description: Added optional Apache `mod_remoteip` support to enable ILIAS to see the real client IP behind a reverse proxy
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/links: |
     - name: Support

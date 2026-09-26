@@ -78,6 +78,13 @@ ingress:
     enabled: true
     secretName: ""     # empty = ingress controller's default certificate; with cert-manager: name of the TLS Secret
 
+reverseProxy:
+  # Enables Apache mod_remoteip so ILIAS sees the real client IP behind a reverse proxy — see
+  # README, "Reverse Proxy Client IP".
+  enabled: false
+  # CIDRs/IPs trusted to set X-Forwarded-For. Required when enabled is true.
+  trustedIPs: []
+
 storage:
   storageClass: local-path   # k3s's built-in default StorageClass — override for other distributions/cloud providers
   mariadb:

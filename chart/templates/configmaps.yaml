@@ -20,3 +20,18 @@ metadata:
   namespace: {{ .Release.Namespace }}
 data:
 {{ (.Files.Glob "health/*").AsConfig | indent 2 }}
+{{- if .Values.reverseProxy.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-remoteip
+  namespace: {{ .Release.Namespace }}
+data:
+  remoteip.conf: |
+    LoadModule remoteip_module /usr/lib/apache2/modules/mod_remoteip.so
+    RemoteIPHeader X-Forwarded-For
+    {{- range .Values.reverseProxy.trustedIPs }}
+    RemoteIPInternalProxy {{ . }}
+    {{- end }}
+{{- end }}

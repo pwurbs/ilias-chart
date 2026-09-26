@@ -228,6 +228,24 @@
         }
       }
     },
+    "reverseProxy": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Apache mod_remoteip so ILIAS sees the real client IP from X-Forwarded-For instead of the reverse proxy's pod IP. Off by default; only enable if the ingress controller sets X-Forwarded-For and its pod network (trustedIPs) is trustworthy."
+        },
+        "trustedIPs": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "IPs/CIDRs trusted to set X-Forwarded-For, e.g. the ingress controller's pod network. Required when enabled is true."
+        }
+      }
+    },
     "storage": {
       "type": "object",
       "properties": {

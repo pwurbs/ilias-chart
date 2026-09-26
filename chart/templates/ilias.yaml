@@ -199,6 +199,11 @@ spec:
             - name: ilias-writable-etc
               mountPath: /usr/local/etc/php/conf.d/ilias.ini
               subPath: php-ilias-ini
+            {{- if .Values.reverseProxy.enabled }}
+            - name: remoteip
+              mountPath: /etc/apache2/conf-enabled/remoteip.conf
+              subPath: remoteip.conf
+            {{- end }}
       volumes:
         - name: ilias-public
           persistentVolumeClaim:
@@ -220,6 +225,11 @@ spec:
         - name: health
           configMap:
             name: {{ .Release.Name }}-health
+        {{- if .Values.reverseProxy.enabled }}
+        - name: remoteip
+          configMap:
+            name: {{ .Release.Name }}-remoteip
+        {{- end }}
 ---
 apiVersion: v1
 kind: Service
