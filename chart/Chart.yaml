@@ -2,8 +2,8 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.5
-appVersion: "11.4"
+version: 1.1.6
+appVersion: "11.5"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart
 sources:
@@ -22,9 +22,9 @@ annotations:
   artifacthub.io/category: skip-prediction
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
-    - kind: added
-      description: Added optional Apache `mod_remoteip` support to enable ILIAS to see the real client IP behind a reverse proxy
-  artifacthub.io/containsSecurityUpdates: "false"
+    - kind: changed
+      description: ILIAS image updated to 11.5
+  artifacthub.io/containsSecurityUpdates: "true"
   artifacthub.io/links: |
     - name: Support
       url: https://codeberg.org/pwurbs/ilias-chart/issues

@@ -1,7 +1,7 @@
 images:
   ilias:
     repository: srsolutions/ilias
-    tag: 11.4-php8.4-apache
+    tag: 11.5-php8.4-apache
     pullPolicy: IfNotPresent
   mariadb:
     repository: mariadb

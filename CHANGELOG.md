@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.6
+- ILIAS image updated to 11.5 (contains security fixes)
+
 ## 1.1.5
 - Added optional Apache `mod_remoteip` support to enable ILIAS to see the real client IP behind a reverse proxy
 
