@@ -20,6 +20,9 @@ spec:
         app.kubernetes.io/name: ilias-mariadb
     spec:
       automountServiceAccountToken: false
+      {{- if not .Values.hostUsers }}
+      hostUsers: false
+      {{- end }}
       containers:
         - name: mariadb
           image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}

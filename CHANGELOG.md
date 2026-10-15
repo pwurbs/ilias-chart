@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.1.7
+- Added optional value `hostUsers` to run all pods in their own Linux user namespace
+
 ## 1.1.6
 - ILIAS image updated to 11.5 (contains security fixes)
 

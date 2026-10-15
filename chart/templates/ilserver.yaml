@@ -21,6 +21,9 @@ spec:
         app.kubernetes.io/name: ilias-ilserver
     spec:
       automountServiceAccountToken: false
+      {{- if not .Values.hostUsers }}
+      hostUsers: false
+      {{- end }}
       initContainers:
         - name: prepare-config
           # Pre-creates the two files below as real files inside the emptyDir — without this,

@@ -22,6 +22,9 @@ spec:
         spec:
           restartPolicy: Never
           automountServiceAccountToken: false
+          {{- if not .Values.hostUsers }}
+          hostUsers: false
+          {{- end }}
           initContainers:
             - name: prepare-etc
               # Same fix as in ilias.yaml: the image entrypoint (which now runs here too, see

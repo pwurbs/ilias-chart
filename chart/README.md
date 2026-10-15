@@ -12,7 +12,7 @@ The upstream `srsolutions/ilias` image, however, was built with root in mind —
 Pull the chart directly from the chart package registry as an OCI artifact:
 
 ```bash
-helm install ilias oci://codeberg.org/pwurbs/charts/ilias --version 1.1.5 \
+helm install ilias oci://codeberg.org/pwurbs/charts/ilias --version <chart-version> \
   --namespace ilias --create-namespace \
   -f my-values.yaml
 ```
@@ -191,6 +191,8 @@ In short:
 - **`ilserver`**: its own entrypoint rewrites `/app/ilias.ini.php`/`/app/ilServer.properties` on every start (same `emptyDir` + init-container-`touch` fix as above for those two files) and needs a writable Lucene index directory (`/var/lucenedata/ilias`) — that one's a plain `emptyDir` mounted as a whole directory, no `subPath` involved, so no pre-creation is needed there.
 - **`wait-for-db`** (in `ilias`) uses the ilias image rather than the mariadb image — both bundle the `mariadb` CLI client, but this way the init container runs as the same UID as `ilias` itself, so the files it pre-creates need no special group permissions to be writable by the main container afterwards.
 - **`mariadb`**: the official image already supports running non-root out of the box (it detects a non-root UID and skips its root-only setup path) — just needed the `securityContext`, nothing else.
+
+**Optional user namespace:** `hostUsers: false` runs all pods in their own Linux user namespace — the container UIDs (33, 999) map to unprivileged, pod-unique UIDs on the node, which limits the impact of a container escape. Existing data on the PVCs stays accessible (idmapped mounts), and the UIDs in [Persistent Volumes](#persistent-volumes) remain the ones to use when copying data in. Not part of the Restricted standard, so opt-in: requires Kubernetes 1.33+, Linux kernel 6.3+ and a recent container runtime (containerd 2.x or CRI-O, runc 1.2+ or crun); pods fail to start on nodes without support.
 
 `readOnlyRootFilesystem` is left `false` (not required by the Restricted standard) because the vendor entrypoint writes several config files directly to the container's root filesystem at every start. Most of the `emptyDir` mounts this would need already exist (added above for the non-root fixes); what's still missing is a handful of other paths — `/var/www/html/ilias.ini.php` itself, Apache's own runtime directories (`/var/run/apache2`, `/tmp`), MariaDB's `/run/mysqld`/`/tmp`. Treated as a separate, optional hardening step, not needed for Restricted PSA compliance.
 

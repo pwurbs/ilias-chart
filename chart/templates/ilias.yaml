@@ -20,6 +20,9 @@ spec:
         app.kubernetes.io/name: ilias
     spec:
       automountServiceAccountToken: false
+      {{- if not .Values.hostUsers }}
+      hostUsers: false
+      {{- end }}
       securityContext:
         sysctls:
           # lets non-root (www-data, uid 33) bind port 80 without root or NET_BIND_SERVICE

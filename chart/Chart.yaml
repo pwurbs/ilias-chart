@@ -2,7 +2,7 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.6
+version: 1.1.7
 appVersion: "11.5"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart
@@ -22,9 +22,9 @@ annotations:
   artifacthub.io/category: skip-prediction
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
-    - kind: changed
-      description: ILIAS image updated to 11.5
-  artifacthub.io/containsSecurityUpdates: "true"
+    - kind: added
+      description: Optional value hostUsers to run all pods in their own Linux user namespace
+  artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/links: |
     - name: Support
       url: https://codeberg.org/pwurbs/ilias-chart/issues

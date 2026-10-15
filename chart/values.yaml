@@ -85,6 +85,13 @@ reverseProxy:
   # CIDRs/IPs trusted to set X-Forwarded-For. Required when enabled is true.
   trustedIPs: []
 
+# false runs all pods in their own Linux user namespace: container UIDs (33/www-data, 999/mysql)
+# map to unprivileged, pod-unique UIDs on the node, which limits the impact of a container escape.
+# Requires node support (Kubernetes 1.33+, Linux kernel 6.3+, containerd 2.x or CRI-O, runc 1.2+
+# or crun, a filesystem with idmapped mount support for the PVCs). Pods fail to start on nodes
+# without it, so it's opt-in.
+hostUsers: true
+
 storage:
   storageClass: local-path   # k3s's built-in default StorageClass — override for other distributions/cloud providers
   mariadb:
