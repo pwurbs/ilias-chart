@@ -19,11 +19,16 @@ spec:
       labels:
         app: {{ .Release.Name }}-ilserver
         app.kubernetes.io/name: ilias-ilserver
+        {{- include "ilias.sharedVolumesLabel" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       {{- if not .Values.hostUsers }}
       hostUsers: false
       {{- end }}
+      {{- include "ilias.sharedVolumesAffinity" . | nindent 6 }}
+      securityContext:
+        fsGroup: 33
+        fsGroupChangePolicy: OnRootMismatch
       initContainers:
         - name: prepare-config
           # Pre-creates the two files below as real files inside the emptyDir — without this,

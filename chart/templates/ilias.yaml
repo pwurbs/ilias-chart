@@ -18,12 +18,16 @@ spec:
       labels:
         app: {{ .Release.Name }}
         app.kubernetes.io/name: ilias
+        {{- include "ilias.sharedVolumesLabel" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       {{- if not .Values.hostUsers }}
       hostUsers: false
       {{- end }}
+      {{- include "ilias.sharedVolumesAffinity" . | nindent 6 }}
       securityContext:
+        fsGroup: 33
+        fsGroupChangePolicy: OnRootMismatch
         sysctls:
           # lets non-root (www-data, uid 33) bind port 80 without root or NET_BIND_SERVICE
           - name: net.ipv4.ip_unprivileged_port_start

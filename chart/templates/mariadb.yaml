@@ -23,6 +23,9 @@ spec:
       {{- if not .Values.hostUsers }}
       hostUsers: false
       {{- end }}
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
       containers:
         - name: mariadb
           image: {{ .Values.images.mariadb.repository }}:{{ .Values.images.mariadb.tag }}

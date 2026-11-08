@@ -28,6 +28,8 @@ Available versions: [codeberg.org/pwurbs/-/packages](https://codeberg.org/pwurbs
 | `ilias-cron` | Kubernetes `CronJob` that runs ILIAS's job queue directly — sharing volumes with `ilias` |
 | `ilias-ilserver` | ILIAS Java server, only reachable internally (`ilias-ilserver:11111`), used for certificate generation. Optional — can be disabled via `ilserver.enabled`. See below for configuring the ilserver connection. |
 
+`ilias`, `ilias-cron` and `ilias-ilserver` share the `ilias-public` and `ilias-data` volumes (ReadWriteOnce) and therefore always run on the same node, enforced by a required pod affinity. The first of them may start on any node, the others follow it.
+
 `ilias` has a `wait-for-db` init container that polls via `mariadb -e "SELECT 1"` until MariaDB is reachable before the actual container starts — avoids failed attempts when all pods start at the same time.
 
 ## Configuration
@@ -156,6 +158,8 @@ The feature is disabled by default; see `reverseProxy` in `values.yaml` for the 
 ### Persistent Volumes
 
 Container-internal UIDs matter when manually copying data into these volumes from outside the container.
+
+Every pod sets `fsGroup` to its container's group (33 or 999) with `fsGroupChangePolicy: OnRootMismatch`, so the volumes are writable even when a new volume belongs to root, as with most block storage. If the top directory of a volume has a different group, for example on an existing `local-path` volume, kubelet changes the group of all files on it once at the next start.
 
 | Volume | Used by → mountpoint | Container user (UID) | Default size |
 |--------|-----------------------|----------------------|--------------|

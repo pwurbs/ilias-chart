@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.8
+- Fixed pods failing to write to new volumes that belong to root, such as cloud block storage: every pod now sets `fsGroup`. On existing installations, the first start after the upgrade changes the group of all files on the volumes once, which takes a while on large volumes
+- Fixed `ilias`, `ilias-cron` and `ilias-ilserver` landing on different nodes, where they can't share their ReadWriteOnce volumes: a required pod affinity now keeps them on the same node
+
 ## 1.1.7
 - Added optional value `hostUsers` to run all pods in their own Linux user namespace
 
