@@ -59,6 +59,10 @@ cron:
   # How often ILIAS's own job queue (notifications, cleanup, indexing, ...) is run.
   # Matches the vendor image's original */10 default.
   schedule: "*/10 * * * *"
+  # Upper limit in seconds for one run, counted from the job's start and including time spent
+  # Pending. Keep it below the schedule interval: with concurrencyPolicy Forbid, a run that never
+  # finishes (e.g. a pod stuck Pending) would otherwise block all later runs without notice.
+  activeDeadlineSeconds: 540
   # ILIAS user name `cli/cron.php run-jobs` impersonates. Must be a user with
   # auth_mode=local and active=1 (see README) — but needs no RBAC role/permissions. Defaults to
   # the built-in "root" superadmin for out-of-the-box compatibility; switching to a dedicated,

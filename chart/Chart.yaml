@@ -2,7 +2,7 @@ apiVersion: v2
 name: ilias
 description: ILIAS LMS deployment
 type: application
-version: 1.1.8
+version: 1.1.9
 appVersion: "11.5"
 icon: https://upload.wikimedia.org/wikipedia/commons/8/8a/Logo_ILIAS.svg
 home: https://codeberg.org/pwurbs/ilias-chart
@@ -23,9 +23,7 @@ annotations:
   artifacthub.io/license: Apache-2.0
   artifacthub.io/changes: |
     - kind: fixed
-      description: Pods failing to write to new volumes that belong to root, such as cloud block storage, every pod now sets fsGroup. On existing installations, the first start after the upgrade changes the group of all files on the volumes once, which takes a while on large volumes
-    - kind: fixed
-      description: ilias, ilias-cron and ilias-ilserver landing on different nodes, where they can't share their ReadWriteOnce volumes, a required pod affinity now keeps them on the same node
+      description: A cron run stuck in Pending blocking all later runs without notice, each run now ends after cron.activeDeadlineSeconds
   artifacthub.io/containsSecurityUpdates: "false"
   artifacthub.io/links: |
     - name: Support
