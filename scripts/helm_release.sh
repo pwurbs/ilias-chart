@@ -8,11 +8,14 @@
 #   REGISTRY        OCI registry host
 #   REGISTRY_USER   Registry user/organization
 #   REGISTRY_PATH   Path under the user/org to push to
-#   REGISTRY_TOKEN  Registry token/password with package-write permission
+#   REGISTRY_TOKEN  Registry token/password with package-write permission; without it, the
+#                   token comes from the macOS keychain item `codeberg-push-token`
 #
 # Prerequisites:
 #   - helm 3.8+ installed
-#   - jq (optional; without it, login is always re-run instead of reusing a cached session)
+#   - Keychain item `codeberg-push-token` (unless REGISTRY_TOKEN is set), created with
+#     security add-generic-password -a "$USER" -s codeberg-push-token -T "" -w
+#     With -T "" no application is trusted, so every read asks for the keychain password.
 
 set -e
 
@@ -32,35 +35,28 @@ if [[ -z "${REGISTRY_PATH}" ]]; then
     read -rp "Path under the user/org to push to (e.g. charts): " REGISTRY_PATH
 fi
 
-# helm registry login persists credentials to $HELM_REGISTRY_CONFIG (like docker login) — skip
-# the token prompt/login when jq is available and a cached entry for $REGISTRY already exists.
-ALREADY_LOGGED_IN=false
-HELM_REGISTRY_CONFIG_PATH="$(helm env | sed -n 's/^HELM_REGISTRY_CONFIG="\(.*\)"$/\1/p')"
-if [[ -z "${REGISTRY_TOKEN}" ]] && command -v jq &>/dev/null \
-    && [[ -f "${HELM_REGISTRY_CONFIG_PATH}" ]] \
-    && jq -e --arg r "${REGISTRY}" '.auths[$r]' "${HELM_REGISTRY_CONFIG_PATH}" &>/dev/null; then
-    ALREADY_LOGGED_IN=true
+if [[ -z "${REGISTRY_TOKEN:-}" ]]; then
+    REGISTRY_TOKEN=$(security find-generic-password -a "$USER" -s codeberg-push-token -w 2>/dev/null || true)
 fi
-
-if [[ "${ALREADY_LOGGED_IN}" == false && -z "${REGISTRY_TOKEN}" ]]; then
-    read -rsp "Token for ${REGISTRY_USER}@${REGISTRY} (package write permission): " REGISTRY_TOKEN
-    echo
+if [[ -z "${REGISTRY_TOKEN:-}" ]]; then
+    echo "REGISTRY_TOKEN is not set and the keychain item 'codeberg-push-token' could not be read (missing or access denied). Aborting." >&2
+    exit 1
 fi
 
 OCI_REPO="oci://${REGISTRY}/${REGISTRY_USER}/${REGISTRY_PATH}"
 
 CHART_VERSION=$(awk '/^version:/ {print $2}' "${CHART_DIR}/Chart.yaml")
 
-if [[ "${ALREADY_LOGGED_IN}" == true ]]; then
-    echo "==> Already logged in to ${REGISTRY} (cached credentials), skipping login"
-else
-    echo "==> Logging in to ${REGISTRY} as ${REGISTRY_USER} ..."
-    echo "${REGISTRY_TOKEN}" | helm registry login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
-fi
-
 echo "==> Packaging chart ilias-${CHART_VERSION} ..."
 mkdir -p "${DIST_DIR}"
 helm package "${CHART_DIR}" -d "${DIST_DIR}"
+
+# helm registry login writes the token to the registry config file: the trap logs out on every
+# exit, also after a failed push, so it stays there only while the script runs.
+trap 'helm registry logout "${REGISTRY}" >/dev/null 2>&1 || true' EXIT
+echo "==> Logging in to ${REGISTRY} as ${REGISTRY_USER} ..."
+printf '%s' "${REGISTRY_TOKEN}" | helm registry login "${REGISTRY}" -u "${REGISTRY_USER}" --password-stdin
+unset REGISTRY_TOKEN
 
 echo "==> Pushing to ${OCI_REPO} ..."
 helm push "${DIST_DIR}/ilias-${CHART_VERSION}.tgz" "${OCI_REPO}"
