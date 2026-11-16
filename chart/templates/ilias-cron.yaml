@@ -20,14 +20,21 @@ spec:
           labels:
             app: {{ .Release.Name }}-cron
             app.kubernetes.io/name: ilias-cron
-            {{- include "ilias.sharedVolumesLabel" . | nindent 12 }}
         spec:
           restartPolicy: Never
           automountServiceAccountToken: false
           {{- if not .Values.hostUsers }}
           hostUsers: false
           {{- end }}
-          {{- include "ilias.sharedVolumesAffinity" . | nindent 10 }}
+          # Shares the ReadWriteOnce volumes with the ilias pod, so it must run on the same node. Without a
+          # running ilias pod it stays Pending, and activeDeadlineSeconds ends it.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels:
+                      app: {{ .Release.Name }}
           securityContext:
             fsGroup: 33
             fsGroupChangePolicy: OnRootMismatch

@@ -18,13 +18,11 @@ spec:
       labels:
         app: {{ .Release.Name }}
         app.kubernetes.io/name: ilias
-        {{- include "ilias.sharedVolumesLabel" . | nindent 8 }}
     spec:
       automountServiceAccountToken: false
       {{- if not .Values.hostUsers }}
       hostUsers: false
       {{- end }}
-      {{- include "ilias.sharedVolumesAffinity" . | nindent 6 }}
       securityContext:
         fsGroup: 33
         fsGroupChangePolicy: OnRootMismatch
@@ -49,6 +47,10 @@ spec:
               # already exist in the volume are created as directories by kubelet on first mount,
               # which would make the entrypoint's `echo ... > ilias.ini` fail with "Is a directory".
               touch /writable-etc/cron-ilias /writable-etc/php-ilias-ini
+              {{- if .Values.ilserver.enabled }}
+              # The same applies to the two config files the ilserver entrypoint writes.
+              touch /writable-config/ilias.ini.php /writable-config/ilServer.properties
+              {{- end }}
           env:
             - name: ILIAS_DB_PASSWORD
               valueFrom:
@@ -69,6 +71,10 @@ spec:
           volumeMounts:
             - name: ilias-writable-etc
               mountPath: /writable-etc
+            {{- if .Values.ilserver.enabled }}
+            - name: ilserver-config
+              mountPath: /writable-config
+            {{- end }}
           resources: {{- toYaml .Values.resources.init | nindent 12 }}
         {{- if .Values.branding.enabled }}
         - name: build-delos-css
@@ -211,6 +217,54 @@ spec:
               mountPath: /etc/apache2/conf-enabled/remoteip.conf
               subPath: remoteip.conf
             {{- end }}
+        {{- if .Values.ilserver.enabled }}
+        # Runs in this pod because it reads the same ReadWriteOnce volumes. No readiness probe: a pod is
+        # only ready when all its containers are, so one would take the web interface offline too.
+        - name: ilserver
+          image: {{ .Values.images.ilserver.repository }}:{{ .Values.images.ilserver.tag }}
+          imagePullPolicy: {{ .Values.images.ilserver.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            privileged: false
+            readOnlyRootFilesystem: false
+            runAsNonRoot: true
+            runAsUser: 33
+            runAsGroup: 33
+            seccompProfile:
+              type: RuntimeDefault
+          resources: {{- toYaml .Values.resources.ilserver | nindent 12 }}
+          ports:
+            - containerPort: 11111
+          volumeMounts:
+            - name: ilias-public
+              mountPath: /app/data
+              readOnly: true
+            - name: ilias-data
+              mountPath: /app/iliasdata
+              readOnly: true
+            - name: ilserver-config
+              mountPath: /app/ilias.ini.php
+              subPath: ilias.ini.php
+            - name: ilserver-config
+              mountPath: /app/ilServer.properties
+              subPath: ilServer.properties
+            - name: ilserver-lucene
+              mountPath: /var/lucenedata/ilias
+          startupProbe:
+            tcpSocket:
+              port: 11111
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12
+          livenessProbe:
+            tcpSocket:
+              port: 11111
+            periodSeconds: 60
+            timeoutSeconds: 3
+            failureThreshold: 3
+        {{- end }}
       volumes:
         - name: ilias-public
           persistentVolumeClaim:
@@ -222,6 +276,15 @@ spec:
         # both dirs are root-owned (mode 755) in the image, see wait-for-db above for the touch.
         - name: ilias-writable-etc
           emptyDir: {}
+        {{- if .Values.ilserver.enabled }}
+        # Lets the ilserver entrypoint write /app/ilias.ini.php and ilServer.properties as non-root,
+        # see wait-for-db above for the touch.
+        - name: ilserver-config
+          emptyDir: {}
+        # Lucene search index (IndexPath in ilServer.properties), root-owned in the image, not persisted.
+        - name: ilserver-lucene
+          emptyDir: {}
+        {{- end }}
         {{- if .Values.branding.enabled }}
         - name: branding
           configMap:
@@ -249,3 +312,19 @@ spec:
   ports:
     - port: 80
       targetPort: 80
+{{- if .Values.ilserver.enabled }}
+---
+# Keeps the address <release>-ilserver:11111 for the ilserver container, which ILIAS reads from the
+# DB setting rpc_server_host and which ilias-cron needs too (search index, certificates).
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-ilserver
+  namespace: {{ .Release.Namespace }}
+spec:
+  selector:
+    app: {{ .Release.Name }}
+  ports:
+    - port: 11111
+      targetPort: 11111
+{{- end }}

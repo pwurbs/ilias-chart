@@ -51,8 +51,8 @@ branding:
   css: ""
 
 ilserver:
-  # The ILIAS Java server is only needed for certificate/PDF generation. When false,
-  # neither the Deployment nor the Service is rendered.
+  # The ILIAS Java server is only needed for certificate/PDF generation. Runs as a second
+  # container in the ilias pod. When false, neither the container nor its Service is rendered.
   enabled: true
 
 cron:

@@ -162,7 +162,7 @@
         "enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Deploy the ILIAS Java server (ilserver), used for certificate/PDF generation. When false, neither its Deployment nor Service is rendered."
+          "description": "Run the ILIAS Java server (ilserver), used for certificate/PDF generation, as a second container in the ilias pod. When false, neither the container nor its Service is rendered."
         }
       }
     },

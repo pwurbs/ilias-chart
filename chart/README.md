@@ -24,11 +24,12 @@ Available versions: [codeberg.org/pwurbs/-/packages](https://codeberg.org/pwurbs
 | Pod | Description |
 |-----|-------------|
 | `ilias-mariadb` | MariaDB, version pinned via `images.mariadb.tag`, data in a PVC |
-| `ilias` | ILIAS web server (Apache + PHP), mounts the `ilias-public` and `ilias-data` PVCs |
+| `ilias` | ILIAS web server (Apache + PHP), mounts the `ilias-public` and `ilias-data` PVCs. Its second container `ilserver` is the ILIAS Java server, used for certificate generation and only reachable internally via the Service `ilias-ilserver:11111`. Optional — can be disabled via `ilserver.enabled`. See below for configuring the ilserver connection. |
 | `ilias-cron` | Kubernetes `CronJob` that runs ILIAS's job queue directly — sharing volumes with `ilias` |
-| `ilias-ilserver` | ILIAS Java server, only reachable internally (`ilias-ilserver:11111`), used for certificate generation. Optional — can be disabled via `ilserver.enabled`. See below for configuring the ilserver connection. |
 
-`ilias`, `ilias-cron` and `ilias-ilserver` share the `ilias-public` and `ilias-data` volumes (ReadWriteOnce) and therefore always run on the same node, enforced by a required pod affinity. The first of them may start on any node, the others follow it.
+`ilias-cron` shares the `ilias-public` and `ilias-data` volumes (ReadWriteOnce) with `ilias` and therefore follows the `ilias` pod to its node, enforced by a required pod affinity. `ilias` itself has no affinity, so after a node drain it starts on another node right away.
+
+Since `ilserver` runs in the `ilias` pod, updating it restarts the web interface too. It has no readiness probe, so a short `ilserver` outage doesn't take the web interface offline, but an `ilserver` that keeps crashing does.
 
 `ilias` has a `wait-for-db` init container that polls via `mariadb -e "SELECT 1"` until MariaDB is reachable before the actual container starts — avoids failed attempts when all pods start at the same time.
 
@@ -164,8 +165,8 @@ Every pod sets `fsGroup` to its container's group (33 or 999) with `fsGroupChang
 | Volume | Used by → mountpoint | Container user (UID) | Default size |
 |--------|-----------------------|----------------------|--------------|
 | `mariadb-data` | `ilias-mariadb` → `/var/lib/mysql` | mysql (999) | 5Gi |
-| `ilias-public` | `ilias`, `ilias-cron` → `/var/www/html/public/data`; `ilias-ilserver` (read-only) → `/app/data` | www-data (33) | 5Gi |
-| `ilias-data` | `ilias`, `ilias-cron` → `/var/iliasdata/ilias`; `ilias-ilserver` (read-only) → `/app/iliasdata` | www-data (33) | 50Gi |
+| `ilias-public` | `ilias`, `ilias-cron` → `/var/www/html/public/data`; `ilserver` container in `ilias` (read-only) → `/app/data` | www-data (33) | 5Gi |
+| `ilias-data` | `ilias`, `ilias-cron` → `/var/iliasdata/ilias`; `ilserver` container in `ilias` (read-only) → `/app/iliasdata` | www-data (33) | 50Gi |
 
 ## Security Measures
 
@@ -192,8 +193,8 @@ In short:
 - **Two root-owned config files** the entrypoint writes on every start (`/etc/cron.d/ilias`, `/usr/local/etc/php/conf.d/ilias.ini`) are redirected via `subPath` onto a small `emptyDir`, pre-created as real files by an init container's `touch` — a `subPath` target that doesn't already exist in the volume would otherwise be created as a directory by kubelet, not a file, breaking the entrypoint's write. Applies to both `ilias` and `ilias-cron`.
 - **`su www-data` inside the vendor entrypoint** (used for the install/update step) is neutralized by shadowing `su` with a shell function for that one shell session: since the container already *is* `www-data`, source and target user are identical, but the real `su` still goes through PAM, which needs a root caller or a password `www-data` (a service account) doesn't have. The function just execs the given command directly; the entrypoint itself — and all its install/update/config-generation logic — stays completely unmodified.
 - **`ilias-cron`** runs as a real Kubernetes `CronJob` instead of a long-running container with the image's own `cron` daemon, which fundamentally requires root (reads root-owned `/etc/cron.d`, `setuid`s to run jobs). Its container still needs the image entrypoint to run first (it writes `ilias.ini.php`, without which `cli/cron.php` can't even boot) — so it uses `args`, not a `command` override, plus its own copy of the DB/HTTP env vars and the same `/etc/cron.d`/`conf.d` `emptyDir` fix as `ilias`.
-- **`ilserver`**: its own entrypoint rewrites `/app/ilias.ini.php`/`/app/ilServer.properties` on every start (same `emptyDir` + init-container-`touch` fix as above for those two files) and needs a writable Lucene index directory (`/var/lucenedata/ilias`) — that one's a plain `emptyDir` mounted as a whole directory, no `subPath` involved, so no pre-creation is needed there.
-- **`wait-for-db`** (in `ilias`) uses the ilias image rather than the mariadb image — both bundle the `mariadb` CLI client, but this way the init container runs as the same UID as `ilias` itself, so the files it pre-creates need no special group permissions to be writable by the main container afterwards.
+- **`ilserver`**: its own entrypoint rewrites `/app/ilias.ini.php`/`/app/ilServer.properties` on every start (same `emptyDir` + `touch` fix as above for those two files, done by `wait-for-db`) and needs a writable Lucene index directory (`/var/lucenedata/ilias`) — that one's a plain `emptyDir` mounted as a whole directory, no `subPath` involved, so no pre-creation is needed there.
+- **`wait-for-db`** (in `ilias`) uses the ilias image rather than the mariadb image — both bundle the `mariadb` CLI client, but this way the init container runs as the same UID as `ilias` and `ilserver`, so the files it pre-creates need no special group permissions to be writable by them afterwards.
 - **`mariadb`**: the official image already supports running non-root out of the box (it detects a non-root UID and skips its root-only setup path) — just needed the `securityContext`, nothing else.
 
 **Optional user namespace:** `hostUsers: false` runs all pods in their own Linux user namespace — the container UIDs (33, 999) map to unprivileged, pod-unique UIDs on the node, which limits the impact of a container escape. Existing data on the PVCs stays accessible (idmapped mounts), and the UIDs in [Persistent Volumes](#persistent-volumes) remain the ones to use when copying data in. Not part of the Restricted standard, so opt-in: requires Kubernetes 1.33+, Linux kernel 6.3+ and a recent container runtime (containerd 2.x or CRI-O, runc 1.2+ or crun); pods fail to start on nodes without support.

@@ -15,6 +15,9 @@ A change to values, templates or behaviour is done only with all four of these, 
 4. chart/values.schema.json: a block for every new or changed values.yaml key, in the structure of
    the existing sections (`type`, `default`, `description` per leaf).
 
+Test builds: `version: X.Y.Z-preN` in chart/Chart.yaml, CHANGELOG and Artifact Hub changes already for
+X.Y.Z, Artifact Hub skips versions with a hyphen.
+
 Docs-only changes need none of this. The install examples use `--version <chart-version>` and need
 no update.
 

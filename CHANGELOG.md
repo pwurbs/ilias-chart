@@ -1,5 +1,8 @@
 # Changelog
 
+## 1.2.0
+- Moved `ilserver` into the `ilias` pod as a second container, so the shared volumes no longer need a pod affinity between `ilias` and `ilserver` that delayed rescheduling, only `ilias-cron` still follows `ilias`. NetworkPolicies or monitoring that select the `<release>-ilserver` pods must select the `ilias` pod instead
+
 ## 1.1.9
 - Fixed a cron run stuck in `Pending` blocking all later runs without notice: each run now ends after `cron.activeDeadlineSeconds`
 
